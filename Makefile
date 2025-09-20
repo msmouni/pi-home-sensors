@@ -31,7 +31,7 @@ OBJS := $(patsubst %.c, $(OBJ_DIR)/%.o, $(SRCS))
 # -----------------------------
 # Output Executable
 # -----------------------------
-TARGET := $(BIN_DIR)/rpi_sensors
+TARGET := $(BIN_DIR)/pi-home-sensors
 
 # -----------------------------
 # Default Target
