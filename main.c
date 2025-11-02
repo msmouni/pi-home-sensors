@@ -88,8 +88,8 @@ void sensors_update(struct bmp280 *bmp280_sens,
             printf("BMP280 pressure: %.2f hPa\n", *bmp280_pressure);
         }
 
-        *temperature = htu21d_read_temperature(htu21d_sens);
-        *humidity = htu21d_read_humidity(htu21d_sens);
+        *temperature = htu21d_read_temperature_no_hold(htu21d_sens);
+        *humidity = htu21d_read_humidity_no_hold(htu21d_sens);
 
         if (temperature->is_valid && humidity->is_valid)
         {
