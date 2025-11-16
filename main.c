@@ -11,6 +11,7 @@
 #include "htu21d.h"
 #include "bmp280.h"
 #include "db.h"
+#include "display.h"
 
 #define I2C_BUS "/dev/i2c-1"
 #define DB_FILE "/var/lib/pi-home-sensors_data/data.db"
@@ -114,6 +115,27 @@ void sensors_update(struct bmp280 *bmp280_sens,
     }
 }
 
+void print_sensor_data(float bmp280_temp, float bmp280_pressure,
+                       struct htu21d_measurement *temperature, struct htu21d_measurement *humidity)
+{
+    char info_msg_l1[MAX_PRINT_SIZE];
+    char info_msg_l2[MAX_PRINT_SIZE];
+
+    snprintf(info_msg_l1, MAX_PRINT_SIZE, "T=%.1fC|P=%dkPa", bmp280_temp, (int)(bmp280_pressure) / 10);
+    display_print(info_msg_l1, 0);
+
+    if (temperature->is_valid && humidity->is_valid)
+    {
+        snprintf(info_msg_l2, MAX_PRINT_SIZE, "T=%.2fC|H=%d%%", temperature->value, (int)(humidity->value));
+        display_print(info_msg_l2, 1);
+    }
+    else
+    {
+        snprintf(info_msg_l2, MAX_PRINT_SIZE, "HTU21D: Invalid data");
+        display_print(info_msg_l2, 1);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     int daemon_mode = 0;
@@ -148,6 +170,11 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    display_create(i2c_bus);
+    display_print("   Welcome to   ", 0);
+    display_print("pi-home-sensors", 1);
+    sleep(3);
+
     // Initialize sensors
     struct bmp280 *bmp280_sens = bmp280_init(i2c_bus);
     float bmp280_temp, bmp280_pressure;
@@ -163,6 +190,8 @@ int main(int argc, char *argv[])
     {
         sensors_update(bmp280_sens, htu21d_sens, sens_db, &temperature, &humidity, &bmp280_temp, &bmp280_pressure, verbose);
 
+        print_sensor_data(bmp280_temp, bmp280_pressure, &temperature, &humidity);
+
         sleep(5); // Wait 5 seconds between measurements
     }
 
@@ -170,9 +199,14 @@ int main(int argc, char *argv[])
     if (verbose)
         printf("Cleaning up resources...\n");
     i2c_close(i2c_bus);
+
     bmp280_close(bmp280_sens);
     htu21d_close(htu21d_sens);
+
     sensors_db_close(sens_db);
+
+    display_clear();
+    display_destroy();
 
     if (verbose)
         printf("Program terminated.\n");

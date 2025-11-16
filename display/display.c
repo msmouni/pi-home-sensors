@@ -1,121 +1,190 @@
 /*
-    1602 (16x2) LCD module with an HD44780 controller,
-    connected through a PCF8574 I²C backpack.
-*/
+ * LCD 16x2 (HD44780 controller) over I²C (PCF8574 backpack)
+ *
+ * This example follows the HD44780 datasheet closely:
+ * - 4-bit mode initialization (Section 10 "Initializing by Instruction")
+ * - Uses PCF8574 I²C I/O expander (address typically 0x27 or 0x3F)
+ * - Displays "Hello" and "World!" alternately.
+ *
+ * Wiring (via PCF8574 backpack):
+ *   P0 → RS (Register Select)
+ *   P1 → RW (Read/Write, always 0 for write)
+ *   P2 → EN (Enable pulse)
+ *   P3 → Backlight (1 = on)
+ *   P4 → D4
+ *   P5 → D5
+ *   P6 → D6
+ *   P7 → D7
+ */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <linux/i2c-dev.h>
 #include "display.h"
+#include <string.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include "i2c.h"
+#include "display/low_level/low_level.h"
 
 #define PCF8574_I2C_ADDR 0x27
 
-static Display display = {.i2c_bus = NULL, .i2c_addr = PCF8574_I2C_ADDR};
+#define MAX_CHARS 16
+#define SCROLL_DELAY_US 500000
 
-// #define LCD_CHR 1 // Mode - Sending data
-// #define LCD_CMD 0 // Mode - Sending command
-
-// #define LCD_LINE_1 0x80 // LCD RAM address for the 1st line
-// #define LCD_LINE_2 0xC0 // LCD RAM address for the 2nd line
-// #define LCD_LINE_3 0x94 // LCD RAM address for the 3rd line
-// #define LCD_LINE_4 0xD4 // LCD RAM address for the 4th line
-
-// #define LCD_BACKLIGHT 0x08 // On
-// // #define LCD_BACKLIGHT   0x00  // Off
-
-// #define ENABLE 0b00000100 // Enable bit
-
-#define E_PULSE 500
-#define E_DELAY 500
-
-static void display_data_pulse(DisplayI2CByte byte)
+typedef struct
 {
-    byte.pins.enable = 0;
-    i2c_write(display.i2c_bus, display.i2c_addr, (const uint8_t *)&byte, sizeof(byte));
+    char line1[MAX_PRINT_SIZE];
+    char line2[MAX_PRINT_SIZE];
 
-    usleep(E_DELAY);
+    int offset1;
+    int offset2;
 
-    byte.pins.enable = 1;
-    i2c_write(display.i2c_bus, display.i2c_addr, (const uint8_t *)&byte, sizeof(byte));
+    _Atomic bool l1_update_needed;
+    _Atomic bool l2_update_needed;
 
-    usleep(E_PULSE);
+    _Atomic bool running;
 
-    byte.pins.enable = 0;
-    i2c_write(display.i2c_bus, display.i2c_addr, (const uint8_t *)&byte, sizeof(byte));
+    pthread_mutex_t lock;
+    pthread_t thread;
+} display_t;
 
-    usleep(E_DELAY);
-}
+static display_t display;
 
-void display_send_data(DisplayI2CByte *display_data, DisplayMode mode)
+/* Print a static (non-scrolling) line */
+static void display_print_line(uint8_t line, const char *src, int offset)
 {
-    DisplayI2CByte high_nibble;
-    DisplayI2CByte low_nibble;
+    display_ll_set_cursor(line);
 
-    high_nibble.pins.rs = mode;
-    high_nibble.pins.rw = DISPLAY_WRITE;
-    high_nibble.pins.backlight = 1;
-    high_nibble.pins.data = (display_data->byte >> 4) & 0x0F;
-
-    low_nibble.pins.rs = mode;
-    low_nibble.pins.rw = DISPLAY_WRITE;
-    low_nibble.pins.backlight = 1;
-    low_nibble.pins.data = display_data->byte & 0x0F;
-
-    // Send high nibble
-    display_data_pulse(high_nibble);
-
-    // Send low nibble
-    display_data_pulse(low_nibble);
-}
-
-void display_init(struct I2cBus *i2c_bus)
-{
-    display.i2c_bus = i2c_bus;
-
-    DisplayInstructions instr = {.byte = 0};
-
-    instr.function_set.interface_data_length = INTERFACE_4BIT;
-    instr.function_set.lines = DISPLAY_2_LINES;
-    instr.function_set.resolution = DISPLAY_5x8_DOTS;
-    instr.function_set.set = 1;
-    display_send_data(&instr, DISPLAY_MODE_CMD);
-
-    instr.byte = 0;
-    instr.entry_mode_set.display_shift = 0;
-    instr.entry_mode_set.entry_increment = DISPLAY_ENTRY_INCREMENT;
-    instr.entry_mode_set.mode_set = 1;
-    display_send_data(&instr, DISPLAY_MODE_CMD);
-
-    instr.byte = 0;
-    instr.display_control.display_on = DISPLAY_OFF;
-    instr.display_control.cursor_on = CURSOR_OFF;
-    instr.display_control.blink_on = BLINK_OFF;
-    instr.display_control.display_control = 1;
-    display_send_data(&instr, DISPLAY_MODE_CMD);
-
-    // 0x33 // 110011 Initialise
-    // 0x32 // 110010 Initialise
-    // 0x06 // 000110 Cursor move direction
-    // 0x0C // 001100 Display On, Cursor Off, Blink Off
-    // 0x28 // 101000 Data length, number of lines, font size
-    // 0x01 // 000001 Clear display
-    usleep(E_DELAY * 1000);
-}
-
-void display_string(const char *message, int line)
-{
-    DisplayI2CByte data_byte = {.byte = 0};
-
-    data_byte.byte = line;
-    display_send_data(&data_byte, DISPLAY_MODE_CMD);
-
-    for (int i = 0; i < 16 && message[i] != '\0'; i++)
+    for (int i = 0; i < MAX_CHARS; i++)
     {
-        data_byte.byte = message[i];
-        display_send_data(&data_byte, DISPLAY_MODE_DATA);
+        char c = src[offset + i];
+
+        if (c == '\0') // pad with spaces
+            c = ' ';
+
+        display_ll_data(c);
     }
+}
+
+/* Circular scrolling with doubled buffer */
+__attribute__((unused)) static void display_print_circular(uint8_t line, const char *src, int *offset)
+{
+    int len = strlen(src);
+
+    /* No need to scroll short text */
+    if (len <= MAX_CHARS)
+    {
+        display_print_line(line, src, 0);
+        return;
+    }
+
+    /* Create doubled string (circular buffer): text ->"texttext" */
+    static char buf[2 * MAX_PRINT_SIZE];
+    snprintf(buf, sizeof(buf), "%s%s", src, src);
+
+    display_ll_set_cursor(line);
+
+    for (int i = 0; i < MAX_CHARS; i++)
+        display_ll_data(buf[*offset + i]);
+
+    /* Advance offset circularly */
+    *offset = (*offset + 1) % len;
+}
+
+/* Rollback scrolling */
+static void display_print_rollback(uint8_t line, const char *src, int *offset)
+{
+    int len = strlen(src);
+
+    /* Print substring */
+    display_print_line(line, src,
+                       (len > MAX_CHARS) ? *offset : 0);
+
+    /* Scroll */
+    if (len > MAX_CHARS)
+        *offset = (*offset + 1) % (len - MAX_CHARS + 1);
+}
+
+static void *display_thread(void *arg)
+{
+    (void)arg;
+
+    while (atomic_load(&display.running))
+    {
+        pthread_mutex_lock(&display.lock);
+
+        /* Reset offsets when content changes */
+        if (atomic_exchange(&display.l1_update_needed, false))
+        {
+            display.offset1 = 0;
+            display_ll_clear();
+        }
+        else if (atomic_exchange(&display.l2_update_needed, false))
+        {
+            display.offset2 = 0;
+            display_ll_clear();
+        }
+
+        /* Print both lines + Scroll */
+        display_print_rollback(0, display.line1, &display.offset1);
+        display_print_rollback(1, display.line2, &display.offset2);
+
+        pthread_mutex_unlock(&display.lock);
+
+        usleep(SCROLL_DELAY_US);
+    }
+
+    return NULL;
+}
+
+void display_create(struct I2cBus *i2c_bus)
+{
+    memset(&display, 0, sizeof(display));
+    pthread_mutex_init(&display.lock, NULL);
+
+    display_ll_init(i2c_bus, PCF8574_I2C_ADDR);
+
+    atomic_store(&display.running, true);
+    pthread_create(&display.thread, NULL, display_thread, NULL);
+}
+
+void display_destroy(void)
+{
+    atomic_store(&display.running, false);
+    pthread_join(display.thread, NULL);
+    pthread_mutex_destroy(&display.lock);
+}
+
+void display_print(const char *str, uint8_t line)
+{
+    if (!str || line > 1)
+        return;
+
+    pthread_mutex_lock(&display.lock);
+
+    if (line == 0)
+    {
+        strncpy(display.line1, str, MAX_PRINT_SIZE - 1);
+        atomic_store(&display.l1_update_needed, true);
+    }
+    else
+    {
+        strncpy(display.line2, str, MAX_PRINT_SIZE - 1);
+        atomic_store(&display.l2_update_needed, true);
+    }
+
+    pthread_mutex_unlock(&display.lock);
+}
+
+void display_clear(void)
+{
+    pthread_mutex_lock(&display.lock);
+    display.line1[0] = '\0';
+    display.line2[0] = '\0';
+    atomic_store(&display.l1_update_needed, true);
+    atomic_store(&display.l2_update_needed, true);
+    pthread_mutex_unlock(&display.lock);
 }
