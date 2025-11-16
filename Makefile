@@ -6,7 +6,7 @@ CC := aarch64-linux-gnu-gcc
 # -----------------------------
 # Directories
 # -----------------------------
-SRC_DIRS := . i2c htu21d bmp280 db
+SRC_DIRS := . i2c htu21d bmp280 db display
 BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
 OBJ_DIR := $(BUILD_DIR)/obj
@@ -24,7 +24,9 @@ SRCS := main.c \
         i2c/i2c.c \
         htu21d/htu21d.c \
         bmp280/bmp280.c \
-        db/db.c
+        db/db.c \
+		display/display.c \
+		display/low_level/low_level.c
 
 OBJS := $(patsubst %.c, $(OBJ_DIR)/%.o, $(SRCS))
 
@@ -42,7 +44,7 @@ all: directories $(TARGET)
 # Create necessary directories
 # -----------------------------
 directories:
-	mkdir -p $(OBJ_DIR) $(BIN_DIR) $(OBJ_DIR)/i2c $(OBJ_DIR)/htu21d $(OBJ_DIR)/bmp280 $(OBJ_DIR)/db
+	mkdir -p $(OBJ_DIR) $(BIN_DIR) $(OBJ_DIR)/i2c $(OBJ_DIR)/htu21d $(OBJ_DIR)/bmp280 $(OBJ_DIR)/db $(OBJ_DIR)/display $(OBJ_DIR)/display/low_level
 
 # -----------------------------
 # Link the final binary
