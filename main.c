@@ -12,6 +12,7 @@
 #include "bmp280.h"
 #include "db.h"
 #include "lcd_16x2.h"
+#include "oled_128x32.h"
 
 #define I2C_BUS "/dev/i2c-1"
 #define DB_FILE "/var/lib/pi-home-sensors_data/data.db"
@@ -169,6 +170,11 @@ int main(int argc, char *argv[])
         perror("Failed to initialize I2C bus");
         return -1;
     }
+
+    // OLED
+    oled_128x32_init(i2c_bus);
+    oled_128x32_clear();
+    oled_128x32_draw_string(0, 0, "Hello from OLED!");
 
     lcd_16x2_create(i2c_bus);
     lcd_16x2_print("   Welcome to   ", 0);
