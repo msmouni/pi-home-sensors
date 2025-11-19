@@ -11,7 +11,7 @@
 #include "htu21d.h"
 #include "bmp280.h"
 #include "db.h"
-#include "display.h"
+#include "lcd_16x2.h"
 
 #define I2C_BUS "/dev/i2c-1"
 #define DB_FILE "/var/lib/pi-home-sensors_data/data.db"
@@ -122,17 +122,17 @@ void print_sensor_data(float bmp280_temp, float bmp280_pressure,
     char info_msg_l2[MAX_PRINT_SIZE];
 
     snprintf(info_msg_l1, MAX_PRINT_SIZE, "T=%.1fC|P=%dkPa", bmp280_temp, (int)(bmp280_pressure) / 10);
-    display_print(info_msg_l1, 0);
+    lcd_16x2_print(info_msg_l1, 0);
 
     if (temperature->is_valid && humidity->is_valid)
     {
         snprintf(info_msg_l2, MAX_PRINT_SIZE, "T=%.2fC|H=%d%%", temperature->value, (int)(humidity->value));
-        display_print(info_msg_l2, 1);
+        lcd_16x2_print(info_msg_l2, 1);
     }
     else
     {
         snprintf(info_msg_l2, MAX_PRINT_SIZE, "HTU21D: Invalid data");
-        display_print(info_msg_l2, 1);
+        lcd_16x2_print(info_msg_l2, 1);
     }
 }
 
@@ -170,9 +170,9 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    display_create(i2c_bus);
-    display_print("   Welcome to   ", 0);
-    display_print("pi-home-sensors", 1);
+    lcd_16x2_create(i2c_bus);
+    lcd_16x2_print("   Welcome to   ", 0);
+    lcd_16x2_print("pi-home-sensors", 1);
     sleep(3);
 
     // Initialize sensors
@@ -205,8 +205,8 @@ int main(int argc, char *argv[])
 
     sensors_db_close(sens_db);
 
-    display_clear();
-    display_destroy();
+    lcd_16x2_clear();
+    lcd_16x2_destroy();
 
     if (verbose)
         printf("Program terminated.\n");
