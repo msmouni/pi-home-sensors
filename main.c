@@ -137,6 +137,17 @@ void print_sensor_data(float bmp280_temp, float bmp280_pressure,
     }
 }
 
+void oled_display_time()
+{
+    time_t now = time(NULL);
+    struct tm tm_now;
+    char ts[32];
+
+    localtime_r(&now, &tm_now);
+    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_now);
+    oled_128x32_draw_string(1, 0, ts);
+}
+
 int main(int argc, char *argv[])
 {
     int daemon_mode = 0;
@@ -197,6 +208,9 @@ int main(int argc, char *argv[])
         sensors_update(bmp280_sens, htu21d_sens, sens_db, &temperature, &humidity, &bmp280_temp, &bmp280_pressure, verbose);
 
         print_sensor_data(bmp280_temp, bmp280_pressure, &temperature, &humidity);
+
+        // get current time as a string and draw it on the OLED
+        oled_display_time();
 
         sleep(5); // Wait 5 seconds between measurements
     }
