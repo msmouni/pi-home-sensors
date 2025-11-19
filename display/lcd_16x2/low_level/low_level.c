@@ -16,7 +16,7 @@
  *   P7 → D7
  */
 
-#include "display/low_level/low_level.h"
+#include "lcd_16x2/low_level/low_level.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -41,7 +41,7 @@
 #define LCD_ENTRY_SHIFT_INC 0x01
 #define LCD_ENTRY_SHIFT_DEC 0x00
 
-/* Flags for display on/off control */
+/* Flags for lcd_16x2 on/off control */
 #define LCD_DISPLAY_ON 0x04
 #define LCD_DISPLAY_OFF 0x00
 #define LCD_CURSOR_ON 0x02
@@ -49,7 +49,7 @@
 #define LCD_BLINK_ON 0x01
 #define LCD_BLINK_OFF 0x00
 
-/* Flags for display/cursor shift */
+/* Flags for lcd_16x2/cursor shift */
 #define LCD_DISPLAY_MOVE 0x08
 #define LCD_CURSOR_MOVE 0x00
 #define LCD_MOVE_RIGHT 0x04
@@ -78,92 +78,92 @@ typedef struct
 {
     struct I2cBus *i2c_bus;
     uint8_t i2c_addr;
-} display_ll_ll_t;
+} lcd_16x2_ll_ll_t;
 
-static display_ll_ll_t display_ll_ll;
+static lcd_16x2_ll_ll_t lcd_16x2_ll_ll;
 
 /* Toggle EN (Enable) to latch 4-bit data */
-static void display_ll_toggle_enable(uint8_t data)
+static void lcd_16x2_ll_toggle_enable(uint8_t data)
 {
-    i2c_write(display_ll_ll.i2c_bus, display_ll_ll.i2c_addr, &data, sizeof(data));
+    i2c_write(lcd_16x2_ll_ll.i2c_bus, lcd_16x2_ll_ll.i2c_addr, &data, sizeof(data));
 
     data |= PIN_EN;
-    i2c_write(display_ll_ll.i2c_bus, display_ll_ll.i2c_addr, &data, sizeof(data));
+    i2c_write(lcd_16x2_ll_ll.i2c_bus, lcd_16x2_ll_ll.i2c_addr, &data, sizeof(data));
     usleep(ENABLE_PULSE_US);
 
     data &= ~PIN_EN;
-    i2c_write(display_ll_ll.i2c_bus, display_ll_ll.i2c_addr, &data, sizeof(data));
+    i2c_write(lcd_16x2_ll_ll.i2c_bus, lcd_16x2_ll_ll.i2c_addr, &data, sizeof(data));
     usleep(ENABLE_PULSE_US);
 }
 
 /* Send 4 bits (nibble) to LCD */
-static void display_ll_write_nibble(uint8_t nibble, uint8_t mode)
+static void lcd_16x2_ll_write_nibble(uint8_t nibble, uint8_t mode)
 {
     /* Combine 4 data bits (D4–D7) with control bits */
     uint8_t data = (nibble & 0xF0) | mode | BACKLIGHT;
-    i2c_write(display_ll_ll.i2c_bus, display_ll_ll.i2c_addr, &data, sizeof(data));
-    display_ll_toggle_enable(data);
+    i2c_write(lcd_16x2_ll_ll.i2c_bus, lcd_16x2_ll_ll.i2c_addr, &data, sizeof(data));
+    lcd_16x2_ll_toggle_enable(data);
 }
 
 /* Send full byte (split into two nibbles) */
-static void display_ll_write_byte(uint8_t value, uint8_t mode)
+static void lcd_16x2_ll_write_byte(uint8_t value, uint8_t mode)
 {
     /* High nibble first */
-    display_ll_write_nibble(value & 0xF0, mode);
+    lcd_16x2_ll_write_nibble(value & 0xF0, mode);
     /* Then low nibble */
-    display_ll_write_nibble((value << 4) & 0xF0, mode);
+    lcd_16x2_ll_write_nibble((value << 4) & 0xF0, mode);
     usleep(COMMAND_DELAY_US);
 }
 
 /* LCD command */
-static void display_ll_command(uint8_t cmd)
+static void lcd_16x2_ll_command(uint8_t cmd)
 {
-    display_ll_write_byte(cmd, 0x00);
+    lcd_16x2_ll_write_byte(cmd, 0x00);
 }
 
 /* Initialize LCD in 4-bit mode (datasheet Figure 24) */
-void display_ll_init(struct I2cBus *i2c_bus, uint8_t i2c_addr)
+void lcd_16x2_ll_init(struct I2cBus *i2c_bus, uint8_t i2c_addr)
 {
-    display_ll_ll.i2c_bus = i2c_bus;
-    display_ll_ll.i2c_addr = i2c_addr;
+    lcd_16x2_ll_ll.i2c_bus = i2c_bus;
+    lcd_16x2_ll_ll.i2c_addr = i2c_addr;
 
     // usleep(50000); // Wait > 40 ms after power-on
 
     /* Set 8-bit mode three times (function set) */
-    display_ll_write_nibble(0x30, 0x00);
+    lcd_16x2_ll_write_nibble(0x30, 0x00);
     usleep(4500);
-    display_ll_write_nibble(0x30, 0x00);
+    lcd_16x2_ll_write_nibble(0x30, 0x00);
     usleep(150);
-    display_ll_write_nibble(0x30, 0x00);
+    lcd_16x2_ll_write_nibble(0x30, 0x00);
     usleep(150);
 
     /* Switch to 4-bit mode */
-    display_ll_write_nibble(0x20, 0x00);
+    lcd_16x2_ll_write_nibble(0x20, 0x00);
     usleep(150);
 
     /* Now we can send full commands in 4-bit mode */
-    display_ll_command(LCD_FUNCTION_SET | LCD_4BIT_MODE | LCD_2LINE | LCD_5x8DOTS);
-    display_ll_command(LCD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_OFF | LCD_BLINK_OFF);
-    display_ll_command(LCD_CLEAR_DISPLAY);
+    lcd_16x2_ll_command(LCD_FUNCTION_SET | LCD_4BIT_MODE | LCD_2LINE | LCD_5x8DOTS);
+    lcd_16x2_ll_command(LCD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_OFF | LCD_BLINK_OFF);
+    lcd_16x2_ll_command(LCD_CLEAR_DISPLAY);
 }
 
 /* Set cursor to line (1 or 2) */
-void display_ll_set_cursor(uint8_t line)
+void lcd_16x2_ll_set_cursor(uint8_t line)
 {
     uint8_t address = (line == 0) ? 0x80 : 0xC0;
-    display_ll_command(address);
+    lcd_16x2_ll_command(address);
 }
 
 /* LCD data (character) */
-void display_ll_data(uint8_t data)
+void lcd_16x2_ll_data(uint8_t data)
 {
-    display_ll_write_byte(data, PIN_RS);
+    lcd_16x2_ll_write_byte(data, PIN_RS);
 }
 
-/* Clear the display */
-void display_ll_clear(void)
+/* Clear the lcd_16x2 */
+void lcd_16x2_ll_clear(void)
 {
-    display_ll_command(LCD_CLEAR_DISPLAY);
-    /* Clearing the display takes a bit longer */
+    lcd_16x2_ll_command(LCD_CLEAR_DISPLAY);
+    /* Clearing the lcd_16x2 takes a bit longer */
     usleep(2000);
 }
