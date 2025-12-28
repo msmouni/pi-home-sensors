@@ -7,6 +7,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "htu21d.h"
 #include "bmp280.h"
@@ -116,6 +119,58 @@ void daemonize(void)
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
+}
+
+int get_ip_address(char *ip, size_t maxlen)
+{
+    struct ifaddrs *ifaddr, *ifa;
+
+    // Get all network interfaces
+    if (getifaddrs(&ifaddr) == -1)
+    {
+        perror("getifaddrs");
+        return -1;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+    {
+        if (!ifa->ifa_addr)
+            continue;
+
+        // IPv4
+        if (ifa->ifa_addr->sa_family == AF_INET)
+        {
+            struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
+
+            // Skip loopback
+            if (sa->sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+                continue;
+
+            inet_ntop(AF_INET, &sa->sin_addr, ip, maxlen);
+            freeifaddrs(ifaddr);
+            return 0;
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return -1;
+}
+
+void display_ip()
+{
+    char ip[INET_ADDRSTRLEN] = {0};
+
+    if (get_ip_address(ip, sizeof(ip)) == 0)
+    {
+        char line[32];
+        snprintf(line, sizeof(line), "IP:%s", ip);
+
+        oled_128x32_draw_string(1, 0, line);
+    }
+    else
+    {
+        oled_128x32_draw_string(1, 0, "IP: no link");
+    }
 }
 
 // Function to handle sensor reading and storage
@@ -263,6 +318,8 @@ int main(int argc, char *argv[])
             sensors_update(bmp280_sens, htu21d_sens, sens_db, &temperature, &humidity, &bmp280_temp, &bmp280_pressure, verbose);
 
             print_sensor_data(bmp280_temp, bmp280_pressure, &temperature, &humidity);
+
+            display_ip();
         }
 
         if (clock_tick)
