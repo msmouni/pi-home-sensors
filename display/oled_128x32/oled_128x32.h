@@ -18,6 +18,7 @@ void oled_128x32_clear(void);
 void oled_128x32_set_cursor(uint8_t page, uint8_t column);
 void oled_128x32_draw_char(char c);
 void oled_128x32_draw_string(uint8_t page, uint8_t col, const char *str);
+void oled_128x32_clear_line(uint8_t page);
 
 void oled_128x32_close();
 

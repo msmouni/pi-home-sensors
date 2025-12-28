@@ -20,10 +20,53 @@
 
 volatile sig_atomic_t keep_running = 1; // Flag for shutdown
 
+#define SENSOR_PERIOD_SEC 5
+#define CLOCK_PERIOD_SEC 1
+
+#define SENSORS_SIG SIGUSR1
+#define CLOCK_SIG SIGUSR2
+
+volatile sig_atomic_t sensor_tick = 0;
+volatile sig_atomic_t clock_tick = 0;
+
 void handle_signal(int signal)
 {
     printf("\nCaught signal %d. Shutting down...\n", signal);
     keep_running = 0; // Change flag to exit the loop
+}
+
+void sensor_handler(int sig)
+{
+    if (sig != SENSORS_SIG)
+        return;
+    sensor_tick = 1;
+}
+void clock_handler(int sig)
+{
+    if (sig != CLOCK_SIG)
+        return;
+    clock_tick = 1;
+}
+
+timer_t make_timer(int signo, __sighandler_t handler, int sec_period)
+{
+
+    signal(signo, handler);
+
+    struct sigevent sev = {0};
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = signo;
+
+    timer_t timerid;
+    timer_create(CLOCK_REALTIME, &sev, &timerid);
+
+    struct itimerspec its = {0};
+    its.it_value.tv_sec = sec_period;
+    its.it_interval.tv_sec = sec_period;
+
+    timer_settime(timerid, 0, &its, NULL);
+
+    return timerid;
 }
 
 /*
@@ -119,21 +162,28 @@ void sensors_update(struct bmp280 *bmp280_sens,
 void print_sensor_data(float bmp280_temp, float bmp280_pressure,
                        struct htu21d_measurement *temperature, struct htu21d_measurement *humidity)
 {
-    char info_msg_l1[MAX_PRINT_SIZE];
-    char info_msg_l2[MAX_PRINT_SIZE];
+    char info_msg_l1[MAX_PRINT_SIZE] = {0};
+    char info_msg_l2[MAX_PRINT_SIZE] = {0};
+
+    lcd_16x2_clear();
+    oled_128x32_clear_line(2);
+    oled_128x32_clear_line(3);
 
     snprintf(info_msg_l1, MAX_PRINT_SIZE, "T=%.1fC|P=%dkPa", bmp280_temp, (int)(bmp280_pressure) / 10);
     lcd_16x2_print(info_msg_l1, 0);
+    oled_128x32_draw_string(2, 0, info_msg_l1);
 
     if (temperature->is_valid && humidity->is_valid)
     {
         snprintf(info_msg_l2, MAX_PRINT_SIZE, "T=%.2fC|H=%d%%", temperature->value, (int)(humidity->value));
         lcd_16x2_print(info_msg_l2, 1);
+        oled_128x32_draw_string(3, 0, info_msg_l2);
     }
     else
     {
         snprintf(info_msg_l2, MAX_PRINT_SIZE, "HTU21D: Invalid data");
         lcd_16x2_print(info_msg_l2, 1);
+        oled_128x32_draw_string(3, 0, info_msg_l2);
     }
 }
 
@@ -145,7 +195,7 @@ void oled_display_time()
 
     localtime_r(&now, &tm_now);
     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_now);
-    oled_128x32_draw_string(1, 0, ts);
+    oled_128x32_draw_string(0, 0, ts);
 }
 
 int main(int argc, char *argv[])
@@ -174,6 +224,8 @@ int main(int argc, char *argv[])
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
+    timer_t t_sensor = make_timer(SENSORS_SIG, sensor_handler, SENSOR_PERIOD_SEC);
+    timer_t t_clock = make_timer(CLOCK_SIG, clock_handler, CLOCK_PERIOD_SEC);
     struct I2cBus *i2c_bus = i2c_init(I2C_BUS);
 
     if (!i2c_bus)
@@ -205,28 +257,40 @@ int main(int argc, char *argv[])
     // Main measurement loop
     while (keep_running)
     {
-        sensors_update(bmp280_sens, htu21d_sens, sens_db, &temperature, &humidity, &bmp280_temp, &bmp280_pressure, verbose);
+        if (sensor_tick)
+        {
+            sensor_tick = 0;
+            sensors_update(bmp280_sens, htu21d_sens, sens_db, &temperature, &humidity, &bmp280_temp, &bmp280_pressure, verbose);
 
-        print_sensor_data(bmp280_temp, bmp280_pressure, &temperature, &humidity);
+            print_sensor_data(bmp280_temp, bmp280_pressure, &temperature, &humidity);
+        }
 
-        // get current time as a string and draw it on the OLED
-        oled_display_time();
+        if (clock_tick)
+        {
+            clock_tick = 0;
+            // get current time as a string and draw it on the OLED
+            oled_display_time();
+        }
 
-        sleep(5); // Wait 5 seconds between measurements
+        pause(); // sleep until next signal
     }
 
     // Cleanup before exiting
     if (verbose)
         printf("Cleaning up resources...\n");
-    i2c_close(i2c_bus);
+
+    timer_delete(t_sensor);
+    timer_delete(t_clock);
+
+    lcd_16x2_clear();
+    oled_128x32_clear();
 
     bmp280_close(bmp280_sens);
     htu21d_close(htu21d_sens);
 
     sensors_db_close(sens_db);
 
-    lcd_16x2_clear();
-    lcd_16x2_destroy();
+    i2c_close(i2c_bus);
 
     if (verbose)
         printf("Program terminated.\n");

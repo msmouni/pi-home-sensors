@@ -91,7 +91,7 @@ void oled_128x32_set_cursor(uint8_t page, uint8_t column)
 
 void oled_128x32_draw_char(char c)
 {
-    const uint8_t *glyph = font[(uint8_t)c];
+    const char *glyph = font[(uint8_t)c];
 
     for (int i = 0; i < 5; i++)
         oled_128x32_send_data(glyph[i]);
@@ -105,6 +105,13 @@ void oled_128x32_draw_string(uint8_t page, uint8_t col, const char *str)
 
     while (*str)
         oled_128x32_draw_char(*str++);
+}
+
+void oled_128x32_clear_line(uint8_t page)
+{
+    oled_128x32_set_cursor(page, 0);
+    for (int i = 0; i < OLED_WIDTH; i++)
+        oled_128x32_send_data(0x00);
 }
 
 void oled_128x32_close()
