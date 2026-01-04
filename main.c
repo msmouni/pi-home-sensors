@@ -224,7 +224,7 @@ void print_sensor_data(float bmp280_temp, float bmp280_pressure,
     oled_128x32_clear_line(2);
     oled_128x32_clear_line(3);
 
-    snprintf(info_msg_l1, MAX_PRINT_SIZE, "T=%.1fC|P=%dkPa", bmp280_temp, (int)(bmp280_pressure) / 10);
+    snprintf(info_msg_l1, MAX_PRINT_SIZE, "T=%.1fC|P=%dhPa", bmp280_temp, (int)bmp280_pressure);
     lcd_16x2_print(info_msg_l1, 0);
     oled_128x32_draw_string(2, 0, info_msg_l1);
 
