@@ -94,7 +94,7 @@ void oled_128x32_draw_char(char c)
     const char *glyph = font[(uint8_t)c];
 
     for (int i = 0; i < 5; i++)
-        oled_128x32_send_data(glyph[i]);
+        oled_128x32_send_data(glyph[i]); // 5 columns of 8 pixels (bits) per char
 
     oled_128x32_send_data(0x00); // 1px spacing
 }
