@@ -6,7 +6,7 @@ CC := aarch64-linux-gnu-gcc
 # -----------------------------
 # Directories
 # -----------------------------
-SRC_DIRS := . i2c htu21d bmp280 db display display/lcd_16x2 display/oled_128x32
+SRC_DIRS := . pi-home-utils pi-home-utils/i2c htu21d bmp280 pi-home-utils/db display display/lcd_16x2 display/oled_128x32
 BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
 OBJ_DIR := $(BUILD_DIR)/obj
@@ -21,10 +21,10 @@ LDFLAGS := -lsqlite3
 # Source and Object Files
 # -----------------------------
 SRCS := main.c \
-        i2c/i2c.c \
+        pi-home-utils/i2c/i2c.c \
         htu21d/htu21d.c \
         bmp280/bmp280.c \
-        db/db.c \
+        pi-home-utils/db/db.c \
 		display/lcd_16x2/lcd_16x2.c \
 		display/lcd_16x2/low_level/low_level.c \
 		display/oled_128x32/oled_128x32.c
@@ -45,7 +45,7 @@ all: directories $(TARGET)
 # Create necessary directories
 # -----------------------------
 directories:
-	mkdir -p $(OBJ_DIR) $(BIN_DIR) $(OBJ_DIR)/i2c $(OBJ_DIR)/htu21d $(OBJ_DIR)/bmp280 $(OBJ_DIR)/db $(OBJ_DIR)/display/lcd_16x2 $(OBJ_DIR)/display/lcd_16x2/low_level $(OBJ_DIR)/display/oled_128x32
+	mkdir -p $(OBJ_DIR) $(BIN_DIR) $(OBJ_DIR)/pi-home-utils/i2c $(OBJ_DIR)/htu21d $(OBJ_DIR)/bmp280 $(OBJ_DIR)/pi-home-utils/db $(OBJ_DIR)/display/lcd_16x2 $(OBJ_DIR)/display/lcd_16x2/low_level $(OBJ_DIR)/display/oled_128x32
 
 # -----------------------------
 # Link the final binary
